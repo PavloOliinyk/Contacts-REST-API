@@ -1,16 +1,21 @@
 const express = require('express');
+const path = require('path');
+const fs = require('fs/promises');
 const { BadRequest, Conflict, Unauthorized } = require('http-errors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const gravatar = require('gravatar');
 
 const { User } = require('../../models');
-const { authenticate } = require('../../middlewares');
+const { authenticate, upload, resize } = require('../../middlewares');
 
 const router = express.Router();
 
 const { joiRegisterSchema, joiLoginSchema } = require('../../models/user');
 
 const { SECRET_KEY } = process.env;
+
+const avatarsDir = path.join(__dirname, '../../', 'public', 'avatars');
 
 router.post('/signup', async (req, res, next) => {
   try {
@@ -25,7 +30,12 @@ router.post('/signup', async (req, res, next) => {
     }
     const salt = await bcrypt.genSalt(10);
     const hashPassword = await bcrypt.hash(password, salt);
-    const newUser = await User.create({ password: hashPassword, email });
+    const avatarURL = gravatar.url(email);
+    const newUser = await User.create({
+      password: hashPassword,
+      email,
+      avatarURL,
+    });
     res.status(201).json({
       user: {
         email: newUser.email,
@@ -96,5 +106,23 @@ router.patch('/', authenticate, async (req, res, next) => {
 
   res.json(updatedContact);
 });
+
+router.patch(
+  '/avatars',
+  authenticate,
+  upload.single('avatar'),
+  resize,
+  async (req, res) => {
+    const { path: tempUpload, filename } = req.file;
+    const [extension] = filename.split('.').reverse();
+    const newFileName = `${req.user._id}.${extension}`;
+    console.log(newFileName);
+    const fileUpload = path.join(avatarsDir, newFileName);
+    await fs.rename(tempUpload, fileUpload);
+    const avatarURL = path.join('avatars', newFileName);
+    await User.findByIdAndUpdate(req.user._id, { avatarURL }, { new: true });
+    res.json({ avatarURL });
+  },
+);
 
 module.exports = router;

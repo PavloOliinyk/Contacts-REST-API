@@ -7,7 +7,6 @@ const { SECRET_KEY } = process.env;
 
 const authenticate = async (req, res, next) => {
   try {
-    console.log('HERE');
     const { authorization } = req.headers;
     if (!authorization) {
       throw new Unauthorized('Not authorized');
